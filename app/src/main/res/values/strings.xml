@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">浮言</string>
+
+    <string name="notification_channel_name">悬浮歌词</string>
+    <string name="notification_channel_description">保持悬浮歌词在后台显示</string>
+    <string name="notification_waiting">等待歌词</string>
+    <string name="action_stop">停止</string>
+    <string name="action_refresh">刷新连接</string>
+
+    <string name="status_connected">已连接</string>
+    <string name="status_service_ready">服务可用，等待播放</string>
+    <string name="status_service_missing">未检测到 SuperLyric</string>
+
+    <string name="now_playing_empty_title">暂无播放</string>
+    <string name="now_playing_empty_summary">在音乐应用中播放歌曲后，歌词会出现在这里</string>
+    <string name="lyrics_placeholder">歌词将在这里流动</string>
+    <string name="waiting_for_lyric">等待下一句歌词</string>
+
+    <string name="section_overlay">悬浮歌词</string>
+    <string name="section_permissions">权限</string>
+    <string name="section_connection">连接</string>
+    <string name="section_about">关于</string>
+
+    <string name="overlay_switch_title">显示悬浮歌词</string>
+    <string name="overlay_switch_summary_on">正在所有应用之上显示</string>
+    <string name="overlay_switch_summary_off">开启后可在任意界面查看歌词</string>
+    <string name="overlay_translation_title">显示翻译</string>
+    <string name="overlay_translation_summary">在歌词下方显示翻译文本</string>
+    <string name="overlay_karaoke_title">逐字高亮</string>
+    <string name="overlay_karaoke_summary">跟随演唱进度逐字点亮歌词</string>
+    <string name="overlay_lock_title">锁定位置</string>
+    <string name="overlay_lock_summary">锁定后触摸会穿透悬浮窗，可在本页解锁</string>
+    <string name="overlay_font_size">文字大小</string>
+    <string name="overlay_opacity">背景不透明度</string>
+    <string name="font_size_value">%1$d sp</string>
+    <string name="opacity_value">%1$d%%</string>
+    <string name="overlay_theme">主题</string>
+    <string name="overlay_theme_summary">当前：%1$s</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="overlay_reset_position">重置悬浮位置</string>
+    <string name="overlay_reset_position_summary">把歌词移回默认位置</string>
+
+    <string name="permission_overlay">悬浮窗权限</string>
+    <string name="permission_granted">已授予</string>
+    <string name="permission_overlay_denied">需要授予才能显示歌词</string>
+    <string name="permission_notification">通知权限</string>
+    <string name="permission_notification_denied">用于显示后台播放控制通知</string>
+
+    <string name="connection_service">SuperLyric 服务</string>
+    <string name="connection_service_available">已连接 · API %1$d</string>
+    <string name="connection_service_connected">已连接</string>
+    <string name="connection_service_unavailable">未检测到服务</string>
+    <string name="connection_registered">接收器状态</string>
+    <string name="connection_registered_yes">已注册</string>
+    <string name="connection_registered_no">未注册</string>
+    <string name="connection_publisher">歌词发布方</string>
+    <string name="unknown">未知</string>
+    <string name="connection_get_superlyric">获取 SuperLyric</string>
+    <string name="connection_get_superlyric_summary">查看安装与 LSPosed 激活说明</string>
+    <string name="connection_hint">浮言通过 SuperLyricApi 接收系统级歌词。安装 SuperLyric 并在 LSPosed 中启用后，播放音乐即可自动显示。</string>
+    <string name="connection_error">注册失败：%1$s</string>
+
+    <string name="about_version">版本 %1$s</string>
+    <string name="about_desc">让歌词安静地浮在屏幕上。</string>
+    <string name="about_tech">悬浮歌词 · SuperLyric 4.0 · MIUIX</string>
+
+    <string name="demo_title">演示歌词</string>
+    <string name="demo_summary">不依赖 SuperLyric，快速预览悬浮窗效果</string>
+</resources>

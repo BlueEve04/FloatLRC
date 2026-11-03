@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 歌词气泡 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M38,32 H70 A14,14 0 0 1 84,46 V62 A14,14 0 0 1 70,76 H38 A14,14 0 0 1 24,62 V46 A14,14 0 0 1 38,32 Z" />
+
+    <!-- 与背景同色的“镂空”歌词线 -->
+    <path
+        android:fillColor="#FF2D6BFF"
+        android:pathData="M38,46 H66 A2,2 0 0 1 66,50 H38 A2,2 0 0 1 38,46 Z" />
+    <path
+        android:fillColor="#FF2D6BFF"
+        android:pathData="M38,55 H70 A2,2 0 0 1 70,59 H38 A2,2 0 0 1 38,55 Z" />
+    <path
+        android:fillColor="#FF2D6BFF"
+        android:pathData="M38,64 H58 A2,2 0 0 1 58,68 H38 A2,2 0 0 1 38,64 Z" />
+</vector>
