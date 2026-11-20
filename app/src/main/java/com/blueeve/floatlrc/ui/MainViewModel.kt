@@ -65,6 +65,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         preferences.update { it.copy(lockPosition = locked) }
     }
 
+    fun setShowOnLockScreen(enabled: Boolean) {
+        preferences.update { it.copy(showOnLockScreen = enabled) }
+    }
+
     fun setFontScale(scale: Float) {
         preferences.update { it.copy(fontScale = scale.coerceIn(0.8f, 1.6f)) }
     }

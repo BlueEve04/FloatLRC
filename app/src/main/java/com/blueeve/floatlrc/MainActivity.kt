@@ -1,6 +1,8 @@
 package com.blueeve.floatlrc
 
 import android.Manifest
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +32,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.blueeve.floatlrc.data.LyricRepository
+import com.blueeve.floatlrc.overlay.OverlayAccessibilityService
 import com.blueeve.floatlrc.ui.FloatLrcTheme
 import com.blueeve.floatlrc.ui.MainCallbacks
 import com.blueeve.floatlrc.ui.MainScreen
@@ -57,6 +61,9 @@ class MainActivity : ComponentActivity() {
             var hasNotificationPermission by remember {
                 mutableStateOf(notificationPermissionGranted(context))
             }
+            var hasAccessibilityService by remember {
+                mutableStateOf(accessibilityServiceEnabled(context))
+            }
 
             val overlayPermissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.StartActivityForResult()
@@ -75,6 +82,7 @@ class MainActivity : ComponentActivity() {
                     if (event == Lifecycle.Event.ON_RESUME) {
                         hasOverlayPermission = Settings.canDrawOverlays(context)
                         hasNotificationPermission = notificationPermissionGranted(context)
+                        hasAccessibilityService = accessibilityServiceEnabled(context)
                         LyricRepository.refreshNow()
                     }
                 }
@@ -90,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     callbacks = MainCallbacks(
                         hasOverlayPermission = hasOverlayPermission,
                         hasNotificationPermission = hasNotificationPermission,
+                        hasAccessibilityService = hasAccessibilityService,
                         onToggleOverlay = { enabled ->
                             if (enabled && !hasOverlayPermission) {
                                 requestOverlayPermission(context, overlayPermissionLauncher)
@@ -105,6 +114,9 @@ class MainActivity : ComponentActivity() {
                                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
                         },
+                        onOpenAccessibilitySettings = {
+                            OverlayAccessibilityService.openSettings(context)
+                        },
                         onOpenSuperLyric = {
                             openUrl(context, "https://github.com/HChenX/SuperLyric")
                         },
@@ -112,6 +124,14 @@ class MainActivity : ComponentActivity() {
                         onShowTranslationChange = viewModel::setShowTranslation,
                         onKaraokeChange = viewModel::setKaraokeEnabled,
                         onLockChange = viewModel::setLockPosition,
+                        onShowOnLockScreenChange = { enabled ->
+                            viewModel.setShowOnLockScreen(enabled)
+                            if (enabled && !hasAccessibilityService) {
+                                // 开关先记录，随后把用户送到无障碍设置。
+                                // 从设置返回时 ON_RESUME 会重新读取服务状态。
+                                OverlayAccessibilityService.openSettings(context)
+                            }
+                        },
                         onFontScaleChange = viewModel::setFontScale,
                         onOpacityChange = viewModel::setBackgroundOpacity,
                         onThemeCycle = viewModel::cycleTheme,
@@ -139,6 +159,16 @@ class MainActivity : ComponentActivity() {
                 context,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
+
+    private fun accessibilityServiceEnabled(context: Context): Boolean {
+        val manager = context.getSystemService(AccessibilityManager::class.java) ?: return false
+        val expected = ComponentName(context, OverlayAccessibilityService::class.java)
+        return manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            .any { info ->
+                val serviceInfo = info.resolveInfo?.serviceInfo ?: return@any false
+                ComponentName(serviceInfo.packageName, serviceInfo.name) == expected
+            }
+    }
 }
 
 private fun requestOverlayPermission(

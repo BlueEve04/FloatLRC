@@ -28,8 +28,10 @@
 
 - **系统级歌词来源**：接收 SuperLyric 发布的歌词，不依赖特定音乐应用。
 - **悬浮窗歌词**：当前行 + 翻译，可拖动、可锁定、位置跨进程保留。
-- **逐字/逐行填色**：有逐字时间时按字点亮，没有时按整行进度从左到右填充。
+- **逐字填色**：有逐字时间时按每个字的起止时间点亮；没有逐字数据时把整行时长按字均分，仍然按字推进而不是匀速扫过。
+- **锁屏显示**：开启后借助无障碍服务把悬浮窗提升到锁屏之上（`TYPE_ACCESSIBILITY_OVERLAY`），锁屏界面也能看到歌词。
 - **本地进度插值**：SuperLyric 只在状态变化时推送快照，悬浮窗用 `elapsedRealtime()` 与倍速在本地平滑推进。
+- **暂停冻结**：3.x 服务端没有播放状态时，用系统音乐输出活动判断暂停，暂停后歌词停在当前字，恢复播放再从原处继续。
 - **前台服务**：Android 14+ 使用 `specialUse` 服务类型，配合常驻通知保证悬浮窗存活。
 - **MIUIX 设置界面**：开关、滑块、主题切换、权限引导、连接状态一页完成。
 - **兼容 3.x / 4.0**：通过 SuperLyricApi 4.0 接入，服务端为 3.x 时自动回退到 legacy 通道。
@@ -54,7 +56,7 @@ flowchart LR
     C -->|LyricListener| D[LyricRepository]
     D -->|StateFlow| E[MIUIX 主界面]
     D -->|StateFlow| F[LyricOverlayService]
-    F -->|TYPE_APPLICATION_OVERLAY| G[Compose 悬浮窗]
+    F -->|TYPE_APPLICATION_OVERLAY<br/>或 TYPE_ACCESSIBILITY_OVERLAY| G[Compose 悬浮窗]
 ```
 
 - `LyricRepository` 是唯一的接收端入口，主界面与悬浮窗服务通过引用计数共享同一次 Binder 注册。
@@ -72,7 +74,7 @@ flowchart LR
 | 已实测设备 | FiiO JM21，Android 13，750×1334 |
 | 已实测来源 | Poweramp（通过 SuperLyric 3.x legacy 服务） |
 
-> 3.x 服务端下，歌词包通常只有整行时间，因此看到的是**整行**填色；4.0 服务端提供逐字时间时会自动切换到逐字填色。
+> 3.x 服务端下，歌词包通常只有整行时间；浮言会把整行时长按字均分，因此看到的是**逐字**推进（时间精度来自整行估算），4.0 服务端提供逐字时间时会使用每个字的真实时间。
 
 ## 安装与使用
 
@@ -132,11 +134,13 @@ app/src/main/java/com/blueeve/floatlrc/
 ├── data/
 │   ├── LyricModels.kt             UI 侧不可变歌词模型与进度插值
 │   ├── LyricRepository.kt         SuperLyric 注册、状态流、演示歌词
+│   ├── PlaybackActivityMonitor.kt  3.x 无播放状态时的暂停检测
 │   └── AppPreferences.kt          设置与悬浮窗位置持久化
 ├── overlay/
 │   ├── LyricOverlayService.kt     前台服务、WindowManager、通知
+│   ├── OverlayAccessibilityService.kt  锁屏显示所需的窗口令牌
 │   ├── OverlayLifecycleOwner.kt   ComposeView 的生命周期宿主
-│   └── OverlayLyricView.kt        悬浮窗 UI 与逐字/逐行填色
+│   └── OverlayLyricView.kt        悬浮窗 UI 与逐字填色
 └── ui/
     ├── Theme.kt                   MiuixTheme 封装
     ├── MainScreen.kt              MIUIX 主界面
@@ -148,6 +152,7 @@ app/src/main/java/com/blueeve/floatlrc/
 | 权限 | 用途 |
 | --- | --- |
 | `SYSTEM_ALERT_WINDOW` | 显示悬浮窗 |
+| 无障碍服务（用户手动开启） | 仅用于「锁屏显示」的窗口令牌，不读取、不操作屏幕内容 |
 | `FOREGROUND_SERVICE` | 保持悬浮窗服务存活 |
 | `FOREGROUND_SERVICE_SPECIAL_USE` | Android 14+ 的悬浮窗前台服务类型 |
 | `POST_NOTIFICATIONS` | 显示常驻通知与停止入口 |
@@ -156,8 +161,9 @@ app/src/main/java/com/blueeve/floatlrc/
 
 ## 已知限制
 
-- **3.x 没有暂停状态**：服务端不提供 `state`，暂停后本地插值仍会前进，直到下一帧将其拉回。
-- **3.x 通常没有逐字时间**：这种情况下只能做整行填色。4.0 的逐字路径已经实现，但尚未在 4.0 服务端上实机验证时间语义。
+- **3.x 没有暂停状态**：服务端不提供 `state`，暂停后也不再推送进度。浮言用 `AudioManager.isMusicActive()` 判断音乐输出是否活跃；暂停时冻结插值，恢复后继续。若暂停时还有其他应用在输出音乐，判断可能不准。
+- **3.x 通常没有逐字时间**：这种情况下按整行时长把每个字依次点亮，时间精度只能近似。4.0 的逐字路径使用每个字的真实时间。
+- **锁屏显示需要无障碍服务**：普通应用悬浮窗会被系统锁屏遮挡；开启「浮言锁屏歌词」无障碍服务后才会切换为锁屏之上的窗口类型。
 - 暂不支持多行歌词滚动、通知栏播放控制、开机自启。
 - MIUIX 仍处于实验阶段，升级版本时可能需要适配 API 变化。
 - 不同 ROM 对后台前台服务、悬浮窗权限的额外限制可能影响常驻表现。
@@ -166,7 +172,7 @@ app/src/main/java/com/blueeve/floatlrc/
 
 - [ ] 在 SuperLyric 4.0 服务端验证逐字时间语义
 - [ ] 多行歌词与上下句滚动
-- [ ] 通知栏播放控制与锁屏歌词
+- [ ] 通知栏播放控制
 - [ ] 开机自启与服务恢复策略
 - [ ] 更细粒度的字体、颜色、宽高自定义
 - [ ] 单元测试与 Compose 截图测试

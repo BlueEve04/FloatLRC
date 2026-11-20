@@ -53,14 +53,17 @@ import kotlin.math.roundToInt
 data class MainCallbacks(
     val hasOverlayPermission: Boolean,
     val hasNotificationPermission: Boolean,
+    val hasAccessibilityService: Boolean,
     val onToggleOverlay: (Boolean) -> Unit,
     val onRequestOverlayPermission: () -> Unit,
     val onRequestNotificationPermission: () -> Unit,
+    val onOpenAccessibilitySettings: () -> Unit,
     val onOpenSuperLyric: () -> Unit,
     val onRefresh: () -> Unit,
     val onShowTranslationChange: (Boolean) -> Unit,
     val onKaraokeChange: (Boolean) -> Unit,
     val onLockChange: (Boolean) -> Unit,
+    val onShowOnLockScreenChange: (Boolean) -> Unit,
     val onFontScaleChange: (Float) -> Unit,
     val onOpacityChange: (Float) -> Unit,
     val onThemeCycle: () -> Unit,
@@ -287,6 +290,19 @@ private fun OverlaySettingsCard(
         )
         SettingsDivider()
         SwitchPreference(
+            checked = settings.showOnLockScreen,
+            onCheckedChange = callbacks.onShowOnLockScreenChange,
+            title = stringResource(R.string.overlay_lockscreen_title),
+            summary = stringResource(
+                when {
+                    !settings.showOnLockScreen -> R.string.overlay_lockscreen_summary_off
+                    callbacks.hasAccessibilityService -> R.string.overlay_lockscreen_summary_on
+                    else -> R.string.overlay_lockscreen_summary_need_service
+                }
+            ),
+        )
+        SettingsDivider()
+        SwitchPreference(
             checked = settings.lockPosition,
             onCheckedChange = callbacks.onLockChange,
             title = stringResource(R.string.overlay_lock_title),
@@ -412,6 +428,15 @@ private fun PermissionCard(callbacks: MainCallbacks) {
                 else R.string.permission_notification_denied
             ),
             onClick = callbacks.onRequestNotificationPermission,
+        )
+        SettingsDivider()
+        ArrowPreference(
+            title = stringResource(R.string.permission_accessibility),
+            summary = stringResource(
+                if (callbacks.hasAccessibilityService) R.string.permission_accessibility_enabled
+                else R.string.permission_accessibility_disabled
+            ),
+            onClick = callbacks.onOpenAccessibilitySettings,
         )
     }
 }

@@ -33,6 +33,7 @@ import com.blueeve.floatlrc.data.AppPreferences
 import com.blueeve.floatlrc.data.LyricRepository
 import com.blueeve.floatlrc.data.NowPlayingUi
 import com.blueeve.floatlrc.data.OverlaySettings
+import com.blueeve.floatlrc.data.PlaybackActivityMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,8 +48,10 @@ import kotlinx.coroutines.launch
 import kotlin.math.min
 
 /**
- * 用 TYPE_APPLICATION_OVERLAY 承载一个 ComposeView。
+ * 承载悬浮歌词的 ComposeView。
  *
+ * 默认使用 TYPE_APPLICATION_OVERLAY；开启「锁屏显示」且无障碍服务已连接时，
+ * 改用 TYPE_ACCESSIBILITY_OVERLAY 以越过系统锁屏的窗口遮挡。
  * 前台服务保证悬浮窗在切到音乐应用后仍存活；通知提供停止入口。
  */
 class LyricOverlayService : Service() {
@@ -56,13 +59,16 @@ class LyricOverlayService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private lateinit var preferences: AppPreferences
-    private lateinit var windowManager: WindowManager
+    private lateinit var appWindowManager: WindowManager
     private lateinit var notificationManager: NotificationManager
     private lateinit var params: WindowManager.LayoutParams
     private lateinit var composeView: ComposeView
     private lateinit var overlayOwner: OverlayLifecycleOwner
 
+    private var hostWindowManager: WindowManager? = null
+    private var usingAccessibilityOverlay = false
     private var attached = false
+    private var viewCreated = false
     private var repositoryAcquired = false
 
     override fun onCreate() {
@@ -80,14 +86,18 @@ class LyricOverlayService : Service() {
 
         LyricRepository.acquire()
         repositoryAcquired = true
-        windowManager = getSystemService(WindowManager::class.java)
-        runCatching { createOverlay() }
-            .onFailure {
-                Log.e(TAG, "Unable to attach the lyric overlay", it)
+        PlaybackActivityMonitor.start(this)
+        appWindowManager = getSystemService(WindowManager::class.java)
+        if (!attachOverlay()) {
+            // 无障碍悬浮窗失败时退回普通悬浮窗，至少保证主界面之外仍能显示。
+            if (!attachOverlay(forceNormalHost = true)) {
+                Log.e(TAG, "Unable to attach the lyric overlay")
                 stopSelf()
                 return
             }
+        }
         observeSettings()
+        observeWindowHost()
         observeNowPlayingForNotification()
 
         _running.value = true
@@ -121,11 +131,8 @@ class LyricOverlayService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
-        if (attached) {
-            runCatching { windowManager.removeView(composeView) }
-            attached = false
-        }
-        if (::overlayOwner.isInitialized) overlayOwner.destroy()
+        PlaybackActivityMonitor.stop()
+        detachOverlay()
         if (repositoryAcquired) {
             LyricRepository.release()
             repositoryAcquired = false
@@ -135,12 +142,31 @@ class LyricOverlayService : Service() {
         super.onDestroy()
     }
 
-    private fun createOverlay() {
+    private fun attachOverlay(forceNormalHost: Boolean = false): Boolean = try {
+        createOverlay(forceNormalHost)
+        true
+    } catch (t: Throwable) {
+        Log.e(TAG, "Unable to attach the lyric overlay", t)
+        detachOverlay()
+        false
+    }
+
+    private fun createOverlay(forceNormalHost: Boolean = false) {
         val screen = screenSize()
+        val accessibilityHost = if (forceNormalHost) null else preferredAccessibilityHost()
+        val host = accessibilityHost ?: appWindowManager
+        val windowType = if (accessibilityHost != null) {
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        } else {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        }
+        hostWindowManager = host
+        usingAccessibilityOverlay = accessibilityHost != null
+
         params = WindowManager.LayoutParams(
             overlayWidth(screen),
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowType,
             baseWindowFlags(),
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -156,6 +182,7 @@ class LyricOverlayService : Service() {
         }
 
         overlayOwner = OverlayLifecycleOwner().apply { create() }
+        viewCreated = true
 
         composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(overlayOwner)
@@ -174,7 +201,7 @@ class LyricOverlayService : Service() {
             }
         }
 
-        windowManager.addView(composeView, params)
+        host.addView(composeView, params)
         attached = true
         overlayOwner.start()
         overlayOwner.resume()
@@ -182,6 +209,67 @@ class LyricOverlayService : Service() {
 
         composeView.post {
             restoreOrCenterPosition(screenSize())
+        }
+    }
+
+    /**
+     * 锁屏显示开启且无障碍服务已连接时，返回无障碍服务的 WindowManager；
+     * 其余情况返回 null，使用普通的应用悬浮窗。
+     */
+    private fun preferredAccessibilityHost(): WindowManager? {
+        if (!preferences.settings.value.showOnLockScreen) return null
+        val service = OverlayAccessibilityService.instance ?: return null
+        return runCatching { service.overlayWindowManager }
+            .onFailure { Log.w(TAG, "Accessibility window manager unavailable", it) }
+            .getOrNull()
+    }
+
+    private fun detachOverlay() {
+        val host = hostWindowManager
+        hostWindowManager = null
+        if (attached) {
+            runCatching { host?.removeView(composeView) }
+            attached = false
+        }
+        if (viewCreated && ::overlayOwner.isInitialized) {
+            runCatching { overlayOwner.destroy() }
+            viewCreated = false
+        }
+        usingAccessibilityOverlay = false
+    }
+
+    private fun observeWindowHost() {
+        // 无障碍服务可能在悬浮窗运行期间被开启/关闭，锁屏开关也会随时变化，
+        // 两种情况都需要在两种窗口类型之间无缝切换一次。
+        scope.launch {
+            // StateFlow 本身就会去重，无需再挂 distinctUntilChanged。
+            OverlayAccessibilityService.connected
+                .collect { switchWindowHostIfNeeded() }
+        }
+        scope.launch {
+            preferences.settings
+                .map { it.showOnLockScreen }
+                .distinctUntilChanged()
+                .collect { switchWindowHostIfNeeded() }
+        }
+    }
+
+    private fun switchWindowHostIfNeeded() {
+        if (!attached) return
+        val wantAccessibility = preferences.settings.value.showOnLockScreen &&
+            OverlayAccessibilityService.instance != null
+        if (wantAccessibility == usingAccessibilityOverlay) return
+
+        detachOverlay()
+        val reattached = if (wantAccessibility) {
+            // 无障碍窗口偶发失败时退回普通悬浮窗，不让歌词整个消失。
+            attachOverlay() || attachOverlay(forceNormalHost = true)
+        } else {
+            attachOverlay(forceNormalHost = true)
+        }
+        if (!reattached) {
+            Log.e(TAG, "Unable to move the overlay to the new window host")
+            stopSelf()
         }
     }
 
@@ -260,15 +348,20 @@ class LyricOverlayService : Service() {
 
     private fun updateLayout() {
         if (!attached) return
-        runCatching { windowManager.updateViewLayout(composeView, params) }
+        val host = hostWindowManager ?: return
+        runCatching { host.updateViewLayout(composeView, params) }
     }
 
     private fun overlayWidth(screen: Point): Int =
         min(dp(440), screen.x - dp(24)).coerceAtLeast(dp(180))
 
+    @Suppress("DEPRECATION")
     private fun baseWindowFlags(): Int =
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            // 无障碍悬浮窗本身就在锁屏之上；普通悬浮窗在锁屏被遮挡时
+            // （例如其他应用用 setShowWhenLocked 顶掉锁屏）也尽量保持可见。
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
 
     private fun openMainActivity() {
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -347,10 +440,10 @@ class LyricOverlayService : Service() {
     @Suppress("DEPRECATION")
     private fun screenSize(): Point {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val bounds = windowManager.currentWindowMetrics.bounds
+            val bounds = appWindowManager.currentWindowMetrics.bounds
             return Point(bounds.width(), bounds.height())
         }
-        val display = windowManager.defaultDisplay
+        val display = appWindowManager.defaultDisplay
         return Point().also { display.getRealSize(it) }
     }
 

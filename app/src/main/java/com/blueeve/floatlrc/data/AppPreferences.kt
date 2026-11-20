@@ -13,6 +13,7 @@ data class OverlaySettings(
     val showTranslation: Boolean = true,
     val karaokeEnabled: Boolean = true,
     val lockPosition: Boolean = false,
+    val showOnLockScreen: Boolean = false,
     val fontScale: Float = 1f,
     val backgroundOpacity: Float = 0.9f,
     val themeMode: Int = THEME_SYSTEM,
@@ -47,6 +48,7 @@ class AppPreferences(context: Context) {
             .putBoolean(KEY_SHOW_TRANSLATION, next.showTranslation)
             .putBoolean(KEY_KARAOKE, next.karaokeEnabled)
             .putBoolean(KEY_LOCK_POSITION, next.lockPosition)
+            .putBoolean(KEY_SHOW_ON_LOCK_SCREEN, next.showOnLockScreen)
             .putFloat(KEY_FONT_SCALE, next.fontScale)
             .putFloat(KEY_BACKGROUND_OPACITY, next.backgroundOpacity)
             .putInt(KEY_THEME_MODE, next.themeMode)
@@ -77,6 +79,7 @@ class AppPreferences(context: Context) {
         showTranslation = prefs.getBoolean(KEY_SHOW_TRANSLATION, true),
         karaokeEnabled = prefs.getBoolean(KEY_KARAOKE, true),
         lockPosition = prefs.getBoolean(KEY_LOCK_POSITION, false),
+        showOnLockScreen = prefs.getBoolean(KEY_SHOW_ON_LOCK_SCREEN, false),
         fontScale = prefs.getFloat(KEY_FONT_SCALE, 1f),
         backgroundOpacity = prefs.getFloat(KEY_BACKGROUND_OPACITY, 0.9f),
         themeMode = prefs.getInt(KEY_THEME_MODE, OverlaySettings.THEME_SYSTEM),
@@ -89,6 +92,7 @@ class AppPreferences(context: Context) {
         const val KEY_SHOW_TRANSLATION = "show_translation"
         const val KEY_KARAOKE = "karaoke"
         const val KEY_LOCK_POSITION = "lock_position"
+        const val KEY_SHOW_ON_LOCK_SCREEN = "show_on_lock_screen"
         const val KEY_FONT_SCALE = "font_scale"
         const val KEY_BACKGROUND_OPACITY = "background_opacity"
         const val KEY_THEME_MODE = "theme_mode"

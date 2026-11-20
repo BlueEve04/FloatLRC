@@ -32,17 +32,13 @@ data class NowPlayingUi(
         get() = line != null && line.text.isNotBlank()
 
     /**
-     * 根据快照时刻推算当前播放进度。
+     * 当前有效的播放速度（毫秒/毫秒）。
      *
-     * SuperLyric 的 position 是推送时刻的快照，播放中只有状态/行变化才会再推送，
-     * 因此悬浮窗需要结合 elapsedRealtime 自己插值。
+     * state == null 是 3.x 服务端经 LegacyV37 转换后的正常情况，
+     * 此时必须按“正在播放”处理，否则进度会永远停在最后一帧。
      */
-    fun estimatedPosition(nowElapsedMs: Long = SystemClock.elapsedRealtime()): Long {
-        val elapsed = (nowElapsedMs - capturedAtElapsedMs).coerceAtLeast(0L)
-        // 3.x 服务端经 LegacyV37 转换后 state 为 null、speed 为 1f。
-        // 此时必须按“正在播放”处理，否则进度会永远停在最后一帧的位置，
-        // 悬浮窗的逐字填色就会卡住不动。
-        val effectiveSpeed = when (playbackState) {
+    val effectiveSpeed: Float
+        get() = when (playbackState) {
             PlaybackState.PAUSED,
             PlaybackState.STOPPED,
             PlaybackState.ERROR,
@@ -53,6 +49,15 @@ data class NowPlayingUi(
             null,
             -> if (speed > 0f) speed else 1f
         }
+
+    /**
+     * 根据快照时刻推算当前播放进度。
+     *
+     * SuperLyric 的 position 是推送时刻的快照，播放中只有状态/行变化才会再推送，
+     * 因此悬浮窗需要结合 elapsedRealtime 自己插值。
+     */
+    fun estimatedPosition(nowElapsedMs: Long = SystemClock.elapsedRealtime()): Long {
+        val elapsed = (nowElapsedMs - capturedAtElapsedMs).coerceAtLeast(0L)
         val estimated = position + (elapsed * effectiveSpeed).toLong()
         return if (duration > 0L) estimated.coerceIn(0L, duration) else estimated.coerceAtLeast(0L)
     }
